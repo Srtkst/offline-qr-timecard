@@ -6,13 +6,44 @@ export function calculateWorkDate(now: Date, boundaryHour: number): string {
   if (d.getHours() < boundaryHour) {
     d.setDate(d.getDate() - 1);
   }
-  
-  // ローカル時刻で YYYY-MM-DD を取得
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  
+
+  return formatLocalDate(d);
+}
+
+export function formatLocalDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
   return `${year}-${month}-${day}`;
+}
+
+export function formatLocalTime(ms: number): string {
+  const d = new Date(ms);
+  const hours = String(d.getHours()).padStart(2, "0");
+  const minutes = String(d.getMinutes()).padStart(2, "0");
+  const seconds = String(d.getSeconds()).padStart(2, "0");
+
+  return `${hours}:${minutes}:${seconds}`;
+}
+
+export function parseIntegerSetting(
+  value: string | undefined,
+  fallback: number,
+  min: number,
+  max: number
+): number {
+  const trimmedValue = value?.trim();
+  if (!trimmedValue) {
+    return fallback;
+  }
+
+  const parsedValue = Number(trimmedValue);
+  if (!Number.isInteger(parsedValue) || parsedValue < min || parsedValue > max) {
+    return fallback;
+  }
+
+  return parsedValue;
 }
 
 /**

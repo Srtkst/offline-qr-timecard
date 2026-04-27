@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import Database from "@tauri-apps/plugin-sql";
+import { calculateWorkDate, formatLocalDate, formatLocalTime, parseIntegerSetting } from "../domain/attendance";
 
 interface PunchLog {
   id: number;
@@ -23,11 +24,25 @@ const TYPE_LABELS: Record<string, string> = {
 
 const PunchLogsPage: React.FC<PunchLogsPageProps> = ({ db }) => {
   const [logs, setLogs] = useState<PunchLog[]>([]);
-  const [filterDate, setFilterDate] = useState(new Date().toISOString().split("T")[0]);
+  const [filterDate, setFilterDate] = useState(formatLocalDate(new Date()));
 
   useEffect(() => {
     loadLogs();
   }, [db, filterDate]);
+
+  useEffect(() => {
+    const loadDefaultWorkDate = async () => {
+      const rows = await db.select<{ value: string }[]>(
+        "SELECT value FROM settings WHERE key = 'day_boundary_hour'"
+      );
+      const boundaryHour = parseIntegerSetting(rows[0]?.value, 5, 0, 23);
+      setFilterDate(calculateWorkDate(new Date(), boundaryHour));
+    };
+
+    loadDefaultWorkDate().catch((err) => {
+      console.error("Failed to load default work date", err);
+    });
+  }, [db]);
 
   const loadLogs = async () => {
     const query = `
@@ -45,8 +60,7 @@ const PunchLogsPage: React.FC<PunchLogsPageProps> = ({ db }) => {
   };
 
   const formatTime = (ms: number) => {
-    const d = new Date(ms);
-    return d.toLocaleTimeString();
+    return formatLocalTime(ms);
   };
 
   return (
