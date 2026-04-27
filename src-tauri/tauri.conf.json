@@ -32,9 +32,7 @@
       "icons/icon.ico"
     ],
     "macOS": {
-      "infoPlist": {
-        "NSCameraUsageDescription": "従業員のQRコードをスキャンして打刻するためにカメラを使用します。"
-      }
+      "infoPlist": "Info.plist"
     }
   }
 }
