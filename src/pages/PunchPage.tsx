@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import Database from "@tauri-apps/plugin-sql";
-import { calculateWorkDate, isDuplicatePunch } from "../domain/attendance";
+import { calculateWorkDate, isDuplicatePunch, parseIntegerSetting } from "../domain/attendance";
 
 type PunchType = "clock_in" | "clock_out" | "break_start" | "break_end";
 
@@ -43,7 +43,17 @@ const PunchPage: React.FC<PunchPageProps> = ({ db, onNavigateAdmin }) => {
       });
   }, [db]);
 
-  const focusInput = () => inputRef.current?.focus();
+  const focusInput = () => {
+    const activeElement = document.activeElement;
+    const canStealFocus =
+      activeElement === document.body ||
+      activeElement === inputRef.current ||
+      activeElement?.tagName === "HTML";
+
+    if (canStealFocus) {
+      inputRef.current?.focus({ preventScroll: true });
+    }
+  };
 
   // フォーカス維持
   useEffect(() => {
@@ -93,9 +103,9 @@ const PunchPage: React.FC<PunchPageProps> = ({ db, onNavigateAdmin }) => {
 
     // 設定取得
     const boundaryRows = await db.select<any[]>("SELECT value FROM settings WHERE key = 'day_boundary_hour'");
-    const boundaryHour = parseInt(boundaryRows[0]?.value || "0");
+    const boundaryHour = parseIntegerSetting(boundaryRows[0]?.value, 5, 0, 23);
     const windowRows = await db.select<any[]>("SELECT value FROM settings WHERE key = 'duplicate_window_sec'");
-    const duplicateWindowSec = parseInt(windowRows[0]?.value || "10");
+    const duplicateWindowSec = parseIntegerSetting(windowRows[0]?.value, 10, 0, 3600);
 
     // 勤務日計算
     const workDate = calculateWorkDate(nowDate, boundaryHour);
@@ -175,7 +185,6 @@ const PunchPage: React.FC<PunchPageProps> = ({ db, onNavigateAdmin }) => {
           ref={inputRef}
           type="text"
           autoFocus
-          onBlur={(e) => e.target.focus()}
         />
       </form>
 

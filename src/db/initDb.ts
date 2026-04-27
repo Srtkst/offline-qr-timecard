@@ -1,7 +1,9 @@
 import Database from "@tauri-apps/plugin-sql";
+import { ensureAdminPinSettings } from "../domain/auth";
 
 export async function initDatabase() {
   const db = await Database.load("sqlite:attendance.db");
+  await db.execute("PRAGMA foreign_keys = ON;");
 
   // スキーマの定義 (schema.sqlの内容)
   await db.execute(`
@@ -52,7 +54,6 @@ export async function initDatabase() {
     ["duplicate_window_sec", "10"],
     ["default_export_encoding", "utf-8-sig"],
     ["last_selected_type", "clock_in"],
-    ["admin_pin", "1234"],
   ];
 
   for (const [key, value] of initialSettings) {
@@ -69,9 +70,11 @@ export async function initDatabase() {
     }
   }
 
-  // テスト用従業員の投入 (従業員が0人の場合のみ)
+  await ensureAdminPinSettings(db);
+
+  // 開発時のみテスト用従業員を投入 (従業員が0人の場合のみ)
   const employeeCount = await db.select<{ count: number }[]>("SELECT COUNT(*) as count FROM employees");
-  if (employeeCount[0].count === 0) {
+  if (import.meta.env.DEV && employeeCount[0].count === 0) {
     await db.execute(
       "INSERT INTO employees (name, employee_code, qr_token, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?)",
       ["テスト 太郎", "T001", "TEST_TOKEN_123", now, now]
