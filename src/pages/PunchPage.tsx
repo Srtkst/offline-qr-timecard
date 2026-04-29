@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import Database from "@tauri-apps/plugin-sql";
 import { calculateWorkDate, isDuplicatePunch, parseIntegerSetting } from "../domain/attendance";
+import CameraScanner from "../components/CameraScanner";
 
 type PunchType = "clock_in" | "clock_out" | "break_start" | "break_end";
 
@@ -22,7 +23,9 @@ const PunchPage: React.FC<PunchPageProps> = ({ db, onNavigateAdmin }) => {
   const [companyName, setCompanyName] = useState("");
   const [message, setMessage] = useState<{ text: string; isError: boolean } | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [useCamera, setUseCamera] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const lastScanRef = useRef<{ token: string; time: number } | null>(null);
 
   // 時刻更新
   useEffect(() => {
@@ -41,9 +44,17 @@ const PunchPage: React.FC<PunchPageProps> = ({ db, onNavigateAdmin }) => {
       .then((rows) => {
         if (rows.length > 0) setSelectedType(rows[0].value as PunchType);
       });
+
+    db.select<{ value: string }[]>("SELECT value FROM settings WHERE key = 'use_camera'")
+      .then((rows) => {
+        if (rows.length > 0) setUseCamera(rows[0].value === "1");
+      });
   }, [db]);
 
-  const focusInput = () => {
+  const focusInput = useCallback(() => {
+    // カメラ使用時は無理にフォーカスを奪わない（ボタン操作等を優先）
+    if (useCamera) return;
+
     const activeElement = document.activeElement;
     const canStealFocus =
       activeElement === document.body ||
@@ -53,36 +64,16 @@ const PunchPage: React.FC<PunchPageProps> = ({ db, onNavigateAdmin }) => {
     if (canStealFocus) {
       inputRef.current?.focus({ preventScroll: true });
     }
-  };
+  }, [useCamera]);
 
   // フォーカス維持
   useEffect(() => {
     focusInput();
     const interval = setInterval(focusInput, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [focusInput]);
 
-  const handleQrSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isProcessing) return;
-
-    const qrToken = inputRef.current?.value.trim();
-    if (!qrToken) return;
-
-    if (inputRef.current) inputRef.current.value = "";
-
-    setIsProcessing(true);
-    try {
-      await processPunch(qrToken);
-    } catch (err: any) {
-      setMessage({ text: err.message || "エラーが発生しました", isError: true });
-    } finally {
-      setIsProcessing(false);
-      focusInput();
-    }
-  };
-
-  const processPunch = async (qrToken: string) => {
+  const processPunch = useCallback(async (qrToken: string) => {
     const nowMs = Date.now();
     const nowDate = new Date(nowMs);
 
@@ -141,12 +132,60 @@ const PunchPage: React.FC<PunchPageProps> = ({ db, onNavigateAdmin }) => {
 
     // 成功メッセージは5秒で消す
     setTimeout(() => setMessage(null), 5000);
+  }, [db, selectedType]);
+
+  const handleQrSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isProcessing) return;
+
+    const qrToken = inputRef.current?.value.trim();
+    if (!qrToken) return;
+
+    if (inputRef.current) inputRef.current.value = "";
+
+    setIsProcessing(true);
+    try {
+      await processPunch(qrToken);
+    } catch (err: any) {
+      setMessage({ text: err.message || "エラーが発生しました", isError: true });
+      setTimeout(() => setMessage(null), 5000);
+    } finally {
+      setIsProcessing(false);
+      focusInput();
+    }
   };
+
+  const handleCameraScan = useCallback(async (token: string) => {
+    if (isProcessing) return;
+
+    // 同じトークンを連続して読み取らないように制御 (3秒間)
+    const now = Date.now();
+    if (lastScanRef.current && lastScanRef.current.token === token && now - lastScanRef.current.time < 3000) {
+      return;
+    }
+    lastScanRef.current = { token, time: now };
+
+    setIsProcessing(true);
+    try {
+      await processPunch(token);
+    } catch (err: any) {
+      setMessage({ text: err.message || "エラーが発生しました", isError: true });
+      setTimeout(() => setMessage(null), 5000);
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [isProcessing, processPunch]);
 
   const changeType = async (type: PunchType) => {
     setSelectedType(type);
     await db.execute("UPDATE settings SET value = ?, updated_at_ms = ? WHERE key = 'last_selected_type'", [type, Date.now()]);
     focusInput();
+  };
+
+  const toggleCamera = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const enabled = e.target.checked;
+    setUseCamera(enabled);
+    await db.execute("UPDATE settings SET value = ?, updated_at_ms = ? WHERE key = 'use_camera'", [enabled ? "1" : "0", Date.now()]);
   };
 
   return (
@@ -171,7 +210,17 @@ const PunchPage: React.FC<PunchPageProps> = ({ db, onNavigateAdmin }) => {
 
       <div className="status-area">
         <p>現在選択中: <strong>{PUNCH_TYPE_LABELS[selectedType]}</strong></p>
-        <p className="hint">QRコードをかざしてください</p>
+        {!useCamera && <p className="hint">QRコードをかざしてください</p>}
+
+        <div className="camera-container">
+          {useCamera && (
+            <CameraScanner onScan={handleCameraScan} isActive={useCamera} />
+          )}
+          <label className="camera-toggle">
+            <input type="checkbox" checked={useCamera} onChange={toggleCamera} />
+            PCカメラを使用する
+          </label>
+        </div>
       </div>
 
       {message && (

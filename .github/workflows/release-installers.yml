@@ -32,14 +32,14 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "lts/*"
+          node-version: 22 # 最新のLTS
           cache: npm
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install frontend dependencies
-        run: npm ci
+      - name: Install dependencies
+        run: npm install
 
       - name: Build and upload installers
         uses: tauri-apps/tauri-action@v0
@@ -52,4 +52,4 @@ jobs:
             Windowsの方は `.msi` または `.exe` をダウンロードしてください。
             macOSの方は `.dmg` をダウンロードしてください。
           releaseDraft: false
-          prerelease: false
+          prerelease: ${{ contains(github.event.inputs.version, 'beta') || contains(github.event.inputs.version, 'rc') }}

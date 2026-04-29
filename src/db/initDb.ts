@@ -54,6 +54,7 @@ export async function initDatabase() {
     ["duplicate_window_sec", "10"],
     ["default_export_encoding", "utf-8-sig"],
     ["last_selected_type", "clock_in"],
+    ["use_camera", "0"],
   ];
 
   for (const [key, value] of initialSettings) {
